@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oculos-sdk"
+version = "0.1.0"
+description = "SDK for instrumenting AI agents with OculOS."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Chinmay Murugkar" },
+]
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+]
+
+[project.urls]
+Homepage = "https://oculos.dev"
+Repository = "https://github.com/agentvoy/oculos"
+
+[tool.hatch.build.targets.wheel]
+packages = ["oculos_sdk"]

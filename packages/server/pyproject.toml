@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oculos"
+version = "0.1.0"
+description = "The control plane for AI agents — create, monitor, and manage from one dashboard."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Chinmay Murugkar" },
+]
+keywords = ["ai", "agents", "monitoring", "observability", "control-plane"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "aiosqlite>=0.20.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "httpx>=0.27.0",
+    "websockets>=12.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+oculos = "oculos.cli:cli"
+
+[project.urls]
+Homepage = "https://oculos.dev"
+Repository = "https://github.com/agentvoy/oculos"
+
+[tool.hatch.build.targets.wheel]
+packages = ["oculos"]
