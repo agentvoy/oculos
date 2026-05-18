@@ -118,6 +118,104 @@ class CostSummary(BaseModel):
     cost_last_24h: float = 0.0
 
 
+# --- Prompts ---
+
+class PromptVersion(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    agent_id: str
+    name: str
+    content: str
+    version: int = 1
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PromptCreate(BaseModel):
+    name: str
+    content: str
+
+
+# --- Secrets ---
+
+class Secret(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    agent_id: str | None = None
+    key_name: str
+    encrypted_value: str
+    hint: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    rotated_at: datetime | None = None
+
+
+class SecretCreate(BaseModel):
+    agent_id: str | None = None
+    key_name: str
+    value: str
+    hint: str | None = None
+
+
+class SecretPublic(BaseModel):
+    """Secret without the encrypted value — safe to send to dashboard."""
+    id: str
+    agent_id: str | None
+    key_name: str
+    hint: str | None
+    created_at: datetime
+    rotated_at: datetime | None
+
+
+# --- Budgets ---
+
+class Budget(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    agent_id: str
+    limit_total: float | None = None
+    limit_per_task: float | None = None
+    limit_per_day: float | None = None
+    alert_at_percent: float = 80.0
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class BudgetCreate(BaseModel):
+    limit_total: float | None = None
+    limit_per_task: float | None = None
+    limit_per_day: float | None = None
+    alert_at_percent: float = 80.0
+
+
+# --- Alerts ---
+
+class AlertRule(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    type: str  # agent_offline | budget_exceeded | error_rate | cost_spike
+    agent_id: str | None = None
+    threshold: float | None = None
+    webhook_url: str | None = None
+    enabled: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    last_triggered: datetime | None = None
+
+
+class AlertRuleCreate(BaseModel):
+    name: str
+    type: str
+    agent_id: str | None = None
+    threshold: float | None = None
+    webhook_url: str | None = None
+
+
+# --- Audit ---
+
+class AuditEntry(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 # --- API responses ---
 
 class AgentListResponse(BaseModel):

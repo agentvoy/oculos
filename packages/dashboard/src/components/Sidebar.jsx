@@ -1,13 +1,19 @@
-import { Eye, LayoutDashboard, Bot, GitBranch, Zap } from 'lucide-react';
+import { Eye, LayoutDashboard, Bot, GitBranch, Zap, FileCode, KeyRound, DollarSign, Network, Bell, BookOpen } from 'lucide-react';
 import { useCallback } from 'react';
 import { usePolling } from '../hooks';
 import { getTraces, getStatus } from '../api';
 import { relativeTime, EVENT_COLORS } from '../utils';
 
 const NAV = [
-  { id: 'overview', label: 'Overview',  icon: LayoutDashboard },
-  { id: 'agents',   label: 'Agents',    icon: Bot },
-  { id: 'traces',   label: 'Traces',    icon: GitBranch },
+  { id: 'overview',  label: 'Overview',   icon: LayoutDashboard },
+  { id: 'agents',    label: 'Agents',     icon: Bot },
+  { id: 'traces',    label: 'Traces',     icon: GitBranch },
+  { id: 'topology',  label: 'Topology',   icon: Network },
+  { id: 'prompts',   label: 'Prompts',    icon: FileCode },
+  { id: 'secrets',   label: 'Secrets',    icon: KeyRound },
+  { id: 'budgets',   label: 'Budgets',    icon: DollarSign },
+  { id: 'alerts',    label: 'Alerts',     icon: Bell },
+  { id: 'audit',     label: 'Audit Log',  icon: BookOpen },
 ];
 
 function LiveFeed() {

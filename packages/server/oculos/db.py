@@ -18,6 +18,11 @@ from oculos.models import (
     CostRecord,
     CostSummary,
     TraceEvent,
+    PromptVersion,
+    Secret,
+    Budget,
+    AlertRule,
+    AuditEntry,
 )
 
 DEFAULT_DB_PATH = Path.home() / ".oculos" / "oculos.db"
@@ -71,6 +76,62 @@ CREATE INDEX IF NOT EXISTS idx_trace_events_trace ON trace_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_trace_events_ts ON trace_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_cost_records_agent ON cost_records(agent_id);
 CREATE INDEX IF NOT EXISTS idx_cost_records_ts ON cost_records(timestamp);
+
+CREATE TABLE IF NOT EXISTS prompts (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (agent_id) REFERENCES agents(id)
+);
+CREATE INDEX IF NOT EXISTS idx_prompts_agent ON prompts(agent_id);
+
+CREATE TABLE IF NOT EXISTS secrets (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT,
+    key_name TEXT NOT NULL,
+    encrypted_value TEXT NOT NULL,
+    hint TEXT,
+    created_at TEXT NOT NULL,
+    rotated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_secrets_agent ON secrets(agent_id);
+
+CREATE TABLE IF NOT EXISTS budgets (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL UNIQUE,
+    limit_total REAL,
+    limit_per_task REAL,
+    limit_per_day REAL,
+    alert_at_percent REAL DEFAULT 80.0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (agent_id) REFERENCES agents(id)
+);
+
+CREATE TABLE IF NOT EXISTS alert_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    agent_id TEXT,
+    threshold REAL,
+    webhook_url TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL,
+    last_triggered TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    action TEXT NOT NULL,
+    resource_type TEXT NOT NULL,
+    resource_id TEXT,
+    details TEXT DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp);
 """
 
 
@@ -318,6 +379,236 @@ class Database:
             cost_last_hour=cost_last_hour,
             cost_last_24h=cost_last_24h,
         )
+
+    # --- Prompts ---
+
+    async def upsert_prompt(self, agent_id: str, name: str, content: str) -> PromptVersion:
+        # Deactivate previous versions
+        await self.db.execute(
+            "UPDATE prompts SET is_active = 0 WHERE agent_id = ? AND name = ?",
+            (agent_id, name),
+        )
+        cursor = await self.db.execute(
+            "SELECT COALESCE(MAX(version), 0) + 1 FROM prompts WHERE agent_id = ? AND name = ?",
+            (agent_id, name),
+        )
+        version = (await cursor.fetchone())[0]
+        p = PromptVersion(agent_id=agent_id, name=name, content=content, version=version)
+        await self.db.execute(
+            "INSERT INTO prompts (id, agent_id, name, content, version, is_active, created_at) VALUES (?,?,?,?,?,1,?)",
+            (p.id, p.agent_id, p.name, p.content, p.version, p.created_at.isoformat()),
+        )
+        await self.db.commit()
+        return p
+
+    async def list_prompts(self, agent_id: str) -> list[PromptVersion]:
+        cursor = await self.db.execute(
+            "SELECT * FROM prompts WHERE agent_id = ? ORDER BY name, version DESC",
+            (agent_id,),
+        )
+        rows = await cursor.fetchall()
+        return [PromptVersion(id=r["id"], agent_id=r["agent_id"], name=r["name"],
+                              content=r["content"], version=r["version"],
+                              is_active=bool(r["is_active"]),
+                              created_at=datetime.fromisoformat(r["created_at"])) for r in rows]
+
+    async def get_active_prompt(self, agent_id: str, name: str) -> PromptVersion | None:
+        cursor = await self.db.execute(
+            "SELECT * FROM prompts WHERE agent_id = ? AND name = ? AND is_active = 1",
+            (agent_id, name),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return PromptVersion(id=row["id"], agent_id=row["agent_id"], name=row["name"],
+                             content=row["content"], version=row["version"],
+                             is_active=True, created_at=datetime.fromisoformat(row["created_at"]))
+
+    async def rollback_prompt(self, prompt_id: str) -> PromptVersion | None:
+        cursor = await self.db.execute("SELECT * FROM prompts WHERE id = ?", (prompt_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        await self.db.execute(
+            "UPDATE prompts SET is_active = 0 WHERE agent_id = ? AND name = ?",
+            (row["agent_id"], row["name"]),
+        )
+        await self.db.execute("UPDATE prompts SET is_active = 1 WHERE id = ?", (prompt_id,))
+        await self.db.commit()
+        return await self.get_active_prompt(row["agent_id"], row["name"])
+
+    async def delete_prompt(self, prompt_id: str) -> bool:
+        cursor = await self.db.execute("DELETE FROM prompts WHERE id = ?", (prompt_id,))
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    # --- Secrets ---
+
+    async def create_secret(self, agent_id: str | None, key_name: str,
+                             encrypted_value: str, hint: str | None = None) -> Secret:
+        s = Secret(agent_id=agent_id, key_name=key_name,
+                   encrypted_value=encrypted_value, hint=hint)
+        await self.db.execute(
+            "INSERT INTO secrets (id, agent_id, key_name, encrypted_value, hint, created_at) VALUES (?,?,?,?,?,?)",
+            (s.id, s.agent_id, s.key_name, s.encrypted_value, s.hint, s.created_at.isoformat()),
+        )
+        await self.db.commit()
+        return s
+
+    async def list_secrets(self, agent_id: str | None = None) -> list[Secret]:
+        if agent_id:
+            cursor = await self.db.execute(
+                "SELECT * FROM secrets WHERE agent_id = ? OR agent_id IS NULL ORDER BY created_at DESC",
+                (agent_id,),
+            )
+        else:
+            cursor = await self.db.execute("SELECT * FROM secrets ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [Secret(id=r["id"], agent_id=r["agent_id"], key_name=r["key_name"],
+                       encrypted_value=r["encrypted_value"], hint=r["hint"],
+                       created_at=datetime.fromisoformat(r["created_at"]),
+                       rotated_at=datetime.fromisoformat(r["rotated_at"]) if r["rotated_at"] else None)
+                for r in rows]
+
+    async def rotate_secret(self, secret_id: str, new_encrypted_value: str) -> Secret | None:
+        now = datetime.utcnow().isoformat()
+        await self.db.execute(
+            "UPDATE secrets SET encrypted_value = ?, rotated_at = ? WHERE id = ?",
+            (new_encrypted_value, now, secret_id),
+        )
+        await self.db.commit()
+        cursor = await self.db.execute("SELECT * FROM secrets WHERE id = ?", (secret_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return Secret(id=row["id"], agent_id=row["agent_id"], key_name=row["key_name"],
+                      encrypted_value=row["encrypted_value"], hint=row["hint"],
+                      created_at=datetime.fromisoformat(row["created_at"]),
+                      rotated_at=datetime.fromisoformat(row["rotated_at"]) if row["rotated_at"] else None)
+
+    async def delete_secret(self, secret_id: str) -> bool:
+        cursor = await self.db.execute("DELETE FROM secrets WHERE id = ?", (secret_id,))
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    # --- Budgets ---
+
+    async def upsert_budget(self, agent_id: str, limit_total: float | None = None,
+                             limit_per_task: float | None = None, limit_per_day: float | None = None,
+                             alert_at_percent: float = 80.0) -> Budget:
+        cursor = await self.db.execute("SELECT id FROM budgets WHERE agent_id = ?", (agent_id,))
+        existing = await cursor.fetchone()
+        b = Budget(agent_id=agent_id, limit_total=limit_total, limit_per_task=limit_per_task,
+                   limit_per_day=limit_per_day, alert_at_percent=alert_at_percent)
+        if existing:
+            await self.db.execute(
+                """UPDATE budgets SET limit_total=?, limit_per_task=?, limit_per_day=?, alert_at_percent=?
+                   WHERE agent_id=?""",
+                (limit_total, limit_per_task, limit_per_day, alert_at_percent, agent_id),
+            )
+        else:
+            await self.db.execute(
+                "INSERT INTO budgets (id, agent_id, limit_total, limit_per_task, limit_per_day, alert_at_percent, created_at) VALUES (?,?,?,?,?,?,?)",
+                (b.id, b.agent_id, b.limit_total, b.limit_per_task, b.limit_per_day, b.alert_at_percent, b.created_at.isoformat()),
+            )
+        await self.db.commit()
+        return b
+
+    async def get_budget(self, agent_id: str) -> Budget | None:
+        cursor = await self.db.execute("SELECT * FROM budgets WHERE agent_id = ?", (agent_id,))
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return Budget(id=row["id"], agent_id=row["agent_id"], limit_total=row["limit_total"],
+                      limit_per_task=row["limit_per_task"], limit_per_day=row["limit_per_day"],
+                      alert_at_percent=row["alert_at_percent"],
+                      created_at=datetime.fromisoformat(row["created_at"]))
+
+    async def list_budgets(self) -> list[Budget]:
+        cursor = await self.db.execute("SELECT * FROM budgets ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [Budget(id=r["id"], agent_id=r["agent_id"], limit_total=r["limit_total"],
+                       limit_per_task=r["limit_per_task"], limit_per_day=r["limit_per_day"],
+                       alert_at_percent=r["alert_at_percent"],
+                       created_at=datetime.fromisoformat(r["created_at"])) for r in rows]
+
+    # --- Alert Rules ---
+
+    async def create_alert_rule(self, name: str, type: str, agent_id: str | None = None,
+                                 threshold: float | None = None, webhook_url: str | None = None) -> AlertRule:
+        a = AlertRule(name=name, type=type, agent_id=agent_id, threshold=threshold, webhook_url=webhook_url)
+        await self.db.execute(
+            "INSERT INTO alert_rules (id, name, type, agent_id, threshold, webhook_url, enabled, created_at) VALUES (?,?,?,?,?,?,1,?)",
+            (a.id, a.name, a.type, a.agent_id, a.threshold, a.webhook_url, a.created_at.isoformat()),
+        )
+        await self.db.commit()
+        return a
+
+    async def list_alert_rules(self) -> list[AlertRule]:
+        cursor = await self.db.execute("SELECT * FROM alert_rules ORDER BY created_at DESC")
+        rows = await cursor.fetchall()
+        return [AlertRule(id=r["id"], name=r["name"], type=r["type"], agent_id=r["agent_id"],
+                          threshold=r["threshold"], webhook_url=r["webhook_url"],
+                          enabled=bool(r["enabled"]), created_at=datetime.fromisoformat(r["created_at"]),
+                          last_triggered=datetime.fromisoformat(r["last_triggered"]) if r["last_triggered"] else None)
+                for r in rows]
+
+    async def delete_alert_rule(self, rule_id: str) -> bool:
+        cursor = await self.db.execute("DELETE FROM alert_rules WHERE id = ?", (rule_id,))
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    # --- Audit Log ---
+
+    async def log_audit(self, action: str, resource_type: str,
+                        resource_id: str | None = None, details: dict | None = None) -> None:
+        entry = AuditEntry(action=action, resource_type=resource_type,
+                           resource_id=resource_id, details=details or {})
+        await self.db.execute(
+            "INSERT INTO audit_log (id, timestamp, action, resource_type, resource_id, details) VALUES (?,?,?,?,?,?)",
+            (entry.id, entry.timestamp.isoformat(), entry.action, entry.resource_type,
+             entry.resource_id, json.dumps(entry.details)),
+        )
+        await self.db.commit()
+
+    async def get_audit_log(self, limit: int = 100) -> list[AuditEntry]:
+        cursor = await self.db.execute(
+            "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?", (limit,)
+        )
+        rows = await cursor.fetchall()
+        return [AuditEntry(id=r["id"], timestamp=datetime.fromisoformat(r["timestamp"]),
+                           action=r["action"], resource_type=r["resource_type"],
+                           resource_id=r["resource_id"],
+                           details=json.loads(r["details"]) if r["details"] else {})
+                for r in rows]
+
+    # --- Topology ---
+
+    async def get_topology(self) -> dict:
+        """Derive agent graph from shared trace IDs."""
+        agents = await self.list_agents()
+        # Find agents that share trace IDs (same pipeline)
+        cursor = await self.db.execute(
+            """SELECT trace_id, GROUP_CONCAT(DISTINCT agent_id) as agent_ids
+               FROM trace_events
+               GROUP BY trace_id
+               HAVING COUNT(DISTINCT agent_id) > 1"""
+        )
+        rows = await cursor.fetchall()
+        edges: set[tuple[str, str]] = set()
+        for row in rows:
+            ids = row["agent_ids"].split(",")
+            for i in range(len(ids)):
+                for j in range(i + 1, len(ids)):
+                    edge = tuple(sorted([ids[i], ids[j]]))
+                    edges.add(edge)  # type: ignore
+        return {
+            "nodes": [{"id": a.id, "name": a.name, "status": a.status.value,
+                        "total_cost": a.total_cost, "total_invocations": a.total_invocations,
+                        "model": a.model, "framework": a.framework}
+                       for a in agents],
+            "edges": [{"source": e[0], "target": e[1]} for e in edges],
+        }
 
     async def get_total_cost(self) -> float:
         cursor = await self.db.execute("SELECT COALESCE(SUM(total_cost), 0) FROM agents")
