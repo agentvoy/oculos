@@ -1,4 +1,4 @@
-import { Eye, LayoutDashboard, Bot, GitBranch, Zap, FileCode, KeyRound, DollarSign, Network, Bell, BookOpen, Settings } from 'lucide-react';
+import { Eye, LayoutDashboard, Boxes, Bot, GitBranch, Zap, FileCode, KeyRound, DollarSign, Network, Bell, BookOpen, Settings } from 'lucide-react';
 import { useCallback } from 'react';
 import { usePolling } from '../hooks';
 import { getTraces, getStatus } from '../api';
@@ -6,6 +6,7 @@ import { relativeTime, EVENT_COLORS } from '../utils';
 
 const NAV = [
   { id: 'overview',  label: 'Overview',   icon: LayoutDashboard },
+  { id: 'workflows', label: 'Workflows',  icon: Boxes },
   { id: 'agents',    label: 'Agents',     icon: Bot },
   { id: 'traces',    label: 'Traces',     icon: GitBranch },
   { id: 'topology',  label: 'Topology',   icon: Network },

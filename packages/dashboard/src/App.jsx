@@ -12,10 +12,13 @@ import BudgetsPage from './components/pages/BudgetsPage';
 import AlertsPage from './components/pages/AlertsPage';
 import AuditPage from './components/pages/AuditPage';
 import SettingsPage from './components/pages/SettingsPage';
+import WorkflowsPage from './components/pages/WorkflowsPage';
+import WorkflowEditor from './components/pages/WorkflowEditor';
 
 export default function App() {
   const [page, setPage] = useState('overview');
   const [selectedAgentId, setSelectedAgentId] = useState(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState(null);
   const [authState, setAuthState] = useState({ checked: false, user: null, authEnabled: false });
 
   useEffect(() => {
@@ -45,12 +48,17 @@ export default function App() {
   function handleNav(p) {
     setPage(p);
     setSelectedAgentId(null);
+    setSelectedWorkflowId(null);
   }
 
   function renderPage() {
     if (page === 'agent-detail' && selectedAgentId) {
       return <AgentDetail agentId={selectedAgentId} onBack={() => handleNav('agents')} />;
     }
+    if (page === 'workflow-editor' && selectedWorkflowId) {
+      return <WorkflowEditor workflowId={selectedWorkflowId} onBack={() => handleNav('workflows')} />;
+    }
+    if (page === 'workflows') return <WorkflowsPage onSelectWorkflow={(wf) => { setSelectedWorkflowId(wf.id); setPage('workflow-editor'); }} />;
     if (page === 'agents')   return <AgentsPage onSelectAgent={handleSelectAgent} />;
     if (page === 'traces')   return <TracesPage />;
     if (page === 'topology') return <TopologyPage />;
