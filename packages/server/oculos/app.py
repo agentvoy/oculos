@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from oculos import __version__
+from oculos.auth import AuthMiddleware
 from oculos.db import Database
 from oculos.heartbeat import HeartbeatMonitor
 
@@ -62,6 +63,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Auth — optional, only active when OAuth env vars are set
+    app.add_middleware(AuthMiddleware)
+
     # Register API routes
     from oculos.api.agents import router as agents_router
     from oculos.api.traces import router as traces_router
@@ -72,7 +76,11 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from oculos.api.topology import router as topology_router
     from oculos.api.alerts import router as alerts_router
     from oculos.api.audit import router as audit_router
+    from oculos.api.auth import router as auth_router
+    from oculos.api.settings import router as settings_router
 
+    app.include_router(auth_router)
+    app.include_router(settings_router)
     app.include_router(agents_router)
     app.include_router(traces_router)
     app.include_router(status_router)

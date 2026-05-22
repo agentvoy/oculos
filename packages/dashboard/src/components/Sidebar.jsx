@@ -1,4 +1,4 @@
-import { Eye, LayoutDashboard, Bot, GitBranch, Zap, FileCode, KeyRound, DollarSign, Network, Bell, BookOpen } from 'lucide-react';
+import { Eye, LayoutDashboard, Bot, GitBranch, Zap, FileCode, KeyRound, DollarSign, Network, Bell, BookOpen, Settings } from 'lucide-react';
 import { useCallback } from 'react';
 import { usePolling } from '../hooks';
 import { getTraces, getStatus } from '../api';
@@ -14,6 +14,7 @@ const NAV = [
   { id: 'budgets',   label: 'Budgets',    icon: DollarSign },
   { id: 'alerts',    label: 'Alerts',     icon: Bell },
   { id: 'audit',     label: 'Audit Log',  icon: BookOpen },
+  { id: 'settings',  label: 'Settings',   icon: Settings },
 ];
 
 function LiveFeed() {
@@ -45,7 +46,7 @@ function LiveFeed() {
   );
 }
 
-export default function Sidebar({ page, onNav }) {
+export default function Sidebar({ page, onNav, user }) {
   const { data: status } = usePolling(getStatus, 10000);
 
   return (
@@ -91,6 +92,16 @@ export default function Sidebar({ page, onNav }) {
       <div className="py-3">
         <LiveFeed />
       </div>
+
+      {/* User */}
+      {user && (
+        <div className="border-t border-border p-3">
+          <div className="flex items-center gap-2 px-2">
+            <img src={user.avatar_url} alt="" className="h-6 w-6 rounded-full" />
+            <span className="text-xs text-secondary truncate flex-1">{user.name}</span>
+          </div>
+        </div>
+      )}
 
       {/* Server status */}
       <div className="border-t border-border p-3">

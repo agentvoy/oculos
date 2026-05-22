@@ -132,6 +132,41 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details TEXT DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp);
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    email TEXT,
+    name TEXT,
+    avatar_url TEXT,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login TEXT,
+    UNIQUE(provider, provider_id)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS api_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    key_prefix TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used TEXT,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 """
 
 
@@ -639,6 +674,109 @@ class Database:
             total_cost=row["total_cost"],
             total_invocations=row["total_invocations"],
         )
+
+    # --- Users ---
+
+    async def upsert_user(self, provider: str, provider_id: str, email: str | None,
+                          name: str | None, avatar_url: str | None) -> dict:
+        import uuid as _uuid
+        user_id = str(_uuid.uuid4())
+        cursor = await self.db.execute(
+            """INSERT INTO users (id, provider, provider_id, email, name, avatar_url, last_login)
+               VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(provider, provider_id) DO UPDATE SET
+                 email=excluded.email, name=excluded.name, avatar_url=excluded.avatar_url,
+                 last_login=datetime('now')
+               RETURNING *""",
+            (user_id, provider, provider_id, email, name, avatar_url),
+        )
+        row = await cursor.fetchone()
+        await self.db.commit()
+        return dict(row)
+
+    async def get_user(self, user_id: str) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def list_users(self) -> list[dict]:
+        cursor = await self.db.execute("SELECT * FROM users ORDER BY created_at DESC")
+        return [dict(r) for r in await cursor.fetchall()]
+
+    # --- Sessions ---
+
+    async def create_session(self, user_id: str, token_hash: str, expires_at: str) -> dict:
+        import uuid as _uuid
+        sid = str(_uuid.uuid4())
+        cursor = await self.db.execute(
+            "INSERT INTO sessions (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?) RETURNING *",
+            (sid, user_id, token_hash, expires_at),
+        )
+        row = await cursor.fetchone()
+        await self.db.commit()
+        return dict(row)
+
+    async def get_session_by_token_hash(self, token_hash: str) -> dict | None:
+        cursor = await self.db.execute(
+            "SELECT s.*, u.email, u.name, u.avatar_url, u.role, u.provider "
+            "FROM sessions s JOIN users u ON s.user_id = u.id "
+            "WHERE s.token_hash = ? AND s.expires_at > datetime('now')",
+            (token_hash,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def delete_session(self, session_id: str) -> None:
+        await self.db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        await self.db.commit()
+
+    async def cleanup_expired_sessions(self) -> None:
+        await self.db.execute("DELETE FROM sessions WHERE expires_at < datetime('now')")
+        await self.db.commit()
+
+    # --- API Keys ---
+
+    async def create_api_key(self, user_id: str, name: str, key_prefix: str,
+                             key_hash: str, expires_at: str | None = None) -> dict:
+        import uuid as _uuid
+        kid = str(_uuid.uuid4())
+        cursor = await self.db.execute(
+            "INSERT INTO api_keys (id, user_id, name, key_prefix, key_hash, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
+            (kid, user_id, name, key_prefix, key_hash, expires_at),
+        )
+        row = await cursor.fetchone()
+        await self.db.commit()
+        return dict(row)
+
+    async def get_api_key_by_hash(self, key_hash: str) -> dict | None:
+        cursor = await self.db.execute(
+            "SELECT k.*, u.role FROM api_keys k JOIN users u ON k.user_id = u.id "
+            "WHERE k.key_hash = ? AND (k.expires_at IS NULL OR k.expires_at > datetime('now'))",
+            (key_hash,),
+        )
+        row = await cursor.fetchone()
+        if row:
+            await self.db.execute(
+                "UPDATE api_keys SET last_used = datetime('now') WHERE id = ?", (dict(row)["id"],),
+            )
+            await self.db.commit()
+        return dict(row) if row else None
+
+    async def list_api_keys(self, user_id: str) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT id, name, key_prefix, created_at, last_used, expires_at "
+            "FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+    async def delete_api_key(self, key_id: str) -> bool:
+        cur = await self.db.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
+        await self.db.commit()
+        return cur.rowcount > 0
+
+    # --- Helpers ---
 
     @staticmethod
     def _row_to_trace_event(row: sqlite3.Row) -> TraceEvent:
