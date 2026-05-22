@@ -228,3 +228,72 @@ class StatusResponse(BaseModel):
     version: str
     agents_count: int = 0
     total_cost: float = 0.0
+
+
+# ── Workflows ──────────────────────────────────
+
+class WorkflowNode(BaseModel):
+    id: str
+    type: str
+    label: str = ""
+    config: dict = {}
+    position: dict = {"x": 0, "y": 0}
+
+
+class WorkflowEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    label: str = ""
+
+
+class WorkflowCreate(BaseModel):
+    name: str
+    description: str = ""
+    icon: str = "⚡"
+    nodes: list[WorkflowNode] = []
+    edges: list[WorkflowEdge] = []
+    trigger_type: str = "manual"
+    trigger_config: dict = {}
+    guardrails: dict = {}
+
+
+class WorkflowUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    icon: str | None = None
+    nodes: list[WorkflowNode] | None = None
+    edges: list[WorkflowEdge] | None = None
+    trigger_type: str | None = None
+    trigger_config: dict | None = None
+    guardrails: dict | None = None
+    status: str | None = None
+
+
+class Workflow(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    nodes: list[WorkflowNode]
+    edges: list[WorkflowEdge]
+    trigger_type: str
+    trigger_config: dict
+    guardrails: dict
+    status: str
+    created_by: str | None
+    created_at: str
+    updated_at: str
+
+
+class WorkflowRun(BaseModel):
+    id: str
+    workflow_id: str
+    status: str
+    started_at: str
+    completed_at: str | None
+    total_cost: float
+    total_steps: int
+    node_results: dict
+    error: str | None
+    trigger_type: str

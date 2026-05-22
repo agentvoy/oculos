@@ -78,6 +78,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from oculos.api.audit import router as audit_router
     from oculos.api.auth import router as auth_router
     from oculos.api.settings import router as settings_router
+    from oculos.api.workflows import router as workflows_router
 
     app.include_router(auth_router)
     app.include_router(settings_router)
@@ -91,6 +92,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(topology_router)
     app.include_router(alerts_router)
     app.include_router(audit_router)
+    app.include_router(workflows_router)
 
     # Serve dashboard static files if they exist
     static_dir = Path(__file__).parent / "static"

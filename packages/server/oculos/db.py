@@ -167,6 +167,37 @@ CREATE TABLE IF NOT EXISTS api_keys (
     expires_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    icon TEXT DEFAULT '⚡',
+    nodes TEXT NOT NULL DEFAULT '[]',
+    edges TEXT NOT NULL DEFAULT '[]',
+    trigger_type TEXT NOT NULL DEFAULT 'manual',
+    trigger_config TEXT NOT NULL DEFAULT '{}',
+    guardrails TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'inactive',
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    total_cost REAL NOT NULL DEFAULT 0,
+    total_steps INTEGER NOT NULL DEFAULT 0,
+    node_results TEXT NOT NULL DEFAULT '{}',
+    error TEXT,
+    trigger_type TEXT NOT NULL DEFAULT 'manual'
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_wf ON workflow_runs(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_started ON workflow_runs(started_at);
 """
 
 
@@ -674,6 +705,115 @@ class Database:
             total_cost=row["total_cost"],
             total_invocations=row["total_invocations"],
         )
+
+    # --- Workflows ---
+
+    def _parse_workflow_row(self, row) -> dict:
+        r = dict(row)
+        r["nodes"] = json.loads(r["nodes"])
+        r["edges"] = json.loads(r["edges"])
+        r["trigger_config"] = json.loads(r["trigger_config"])
+        r["guardrails"] = json.loads(r["guardrails"])
+        return r
+
+    async def create_workflow(self, data: dict) -> dict:
+        import uuid as _uuid
+        wf_id = str(_uuid.uuid4())
+        cursor = await self.db.execute(
+            """INSERT INTO workflows (id, name, description, icon, nodes, edges,
+               trigger_type, trigger_config, guardrails, status, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *""",
+            (wf_id, data["name"], data.get("description", ""), data.get("icon", "⚡"),
+             json.dumps(data.get("nodes", [])), json.dumps(data.get("edges", [])),
+             data.get("trigger_type", "manual"), json.dumps(data.get("trigger_config", {})),
+             json.dumps(data.get("guardrails", {})), data.get("status", "inactive"),
+             data.get("created_by")),
+        )
+        row = await cursor.fetchone()
+        await self.db.commit()
+        return self._parse_workflow_row(row)
+
+    async def get_workflow(self, wf_id: str) -> dict | None:
+        cursor = await self.db.execute("SELECT * FROM workflows WHERE id = ?", (wf_id,))
+        row = await cursor.fetchone()
+        return self._parse_workflow_row(row) if row else None
+
+    async def list_workflows(self) -> list[dict]:
+        cursor = await self.db.execute("SELECT * FROM workflows ORDER BY updated_at DESC")
+        return [self._parse_workflow_row(r) for r in await cursor.fetchall()]
+
+    async def update_workflow(self, wf_id: str, data: dict) -> dict | None:
+        fields, values = [], []
+        for key in ("name", "description", "icon", "trigger_type", "status"):
+            if key in data and data[key] is not None:
+                fields.append(f"{key} = ?")
+                values.append(data[key])
+        for key in ("nodes", "edges", "trigger_config", "guardrails"):
+            if key in data and data[key] is not None:
+                fields.append(f"{key} = ?")
+                values.append(json.dumps(data[key]))
+        if not fields:
+            return await self.get_workflow(wf_id)
+        fields.append("updated_at = datetime('now')")
+        values.append(wf_id)
+        await self.db.execute(
+            f"UPDATE workflows SET {', '.join(fields)} WHERE id = ?", values
+        )
+        await self.db.commit()
+        return await self.get_workflow(wf_id)
+
+    async def delete_workflow(self, wf_id: str) -> bool:
+        cur = await self.db.execute("DELETE FROM workflows WHERE id = ?", (wf_id,))
+        await self.db.commit()
+        return cur.rowcount > 0
+
+    # --- Workflow Runs ---
+
+    def _parse_run_row(self, row) -> dict:
+        r = dict(row)
+        r["node_results"] = json.loads(r["node_results"])
+        return r
+
+    async def create_workflow_run(self, workflow_id: str, trigger_type: str = "manual") -> dict:
+        import uuid as _uuid
+        run_id = str(_uuid.uuid4())
+        cursor = await self.db.execute(
+            "INSERT INTO workflow_runs (id, workflow_id, trigger_type) VALUES (?, ?, ?) RETURNING *",
+            (run_id, workflow_id, trigger_type),
+        )
+        row = await cursor.fetchone()
+        await self.db.commit()
+        return self._parse_run_row(row)
+
+    async def update_workflow_run(self, run_id: str, **kwargs) -> dict | None:
+        fields, values = [], []
+        for key in ("status", "completed_at", "total_cost", "total_steps", "error"):
+            if key in kwargs:
+                fields.append(f"{key} = ?")
+                values.append(kwargs[key])
+        if "node_results" in kwargs:
+            fields.append("node_results = ?")
+            values.append(json.dumps(kwargs["node_results"]))
+        if not fields:
+            return None
+        values.append(run_id)
+        await self.db.execute(
+            f"UPDATE workflow_runs SET {', '.join(fields)} WHERE id = ?", values
+        )
+        await self.db.commit()
+        cursor = await self.db.execute("SELECT * FROM workflow_runs WHERE id = ?", (run_id,))
+        row = await cursor.fetchone()
+        return self._parse_run_row(row) if row else None
+
+    async def list_workflow_runs(self, workflow_id: str | None = None, limit: int = 50) -> list[dict]:
+        if workflow_id:
+            sql = "SELECT * FROM workflow_runs WHERE workflow_id = ? ORDER BY started_at DESC LIMIT ?"
+            params = (workflow_id, limit)
+        else:
+            sql = "SELECT * FROM workflow_runs ORDER BY started_at DESC LIMIT ?"
+            params = (limit,)
+        cursor = await self.db.execute(sql, params)
+        return [self._parse_run_row(r) for r in await cursor.fetchall()]
 
     # --- Users ---
 
