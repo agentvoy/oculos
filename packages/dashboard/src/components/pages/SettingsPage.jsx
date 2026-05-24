@@ -62,12 +62,12 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-2xl">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-primary">Settings</h1>
+        <h1 className="text-xl font-bold text-gradient">Settings</h1>
         <p className="text-sm text-secondary mt-0.5">Server configuration, authentication, and API keys.</p>
       </div>
 
       {/* Server Info */}
-      <div className="rounded-2xl border border-border bg-card p-5 mb-4 fade-in-up">
+      <div className="glass rounded-2xl p-5 mb-4 fade-in-up">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="h-4 w-4 text-muted" />
           <p className="text-sm font-semibold text-primary">Server</p>
@@ -94,14 +94,14 @@ export default function SettingsPage() {
 
       {/* Profile */}
       {user && (
-        <div className="rounded-2xl border border-border bg-card p-5 mb-4 fade-in-up">
+        <div className="glass rounded-2xl p-5 mb-4 fade-in-up">
           <div className="flex items-center gap-2 mb-4">
             <Shield className="h-4 w-4 text-muted" />
             <p className="text-sm font-semibold text-primary">Profile</p>
           </div>
           <div className="flex items-center gap-4">
             {user.avatar_url && (
-              <img src={user.avatar_url} alt="" className="h-10 w-10 rounded-full border border-border" />
+              <img src={user.avatar_url} alt="" className="h-10 w-10 rounded-full ring-2 ring-accent/20" />
             )}
             <div className="flex-1">
               <p className="text-sm font-semibold text-primary">{user.name || 'Unknown'}</p>
@@ -110,8 +110,7 @@ export default function SettingsPage() {
                 Signed in via {user.provider} · {user.role}
               </p>
             </div>
-            <button onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-sidebar border border-border text-xs text-secondary hover:text-red hover:border-red/30 transition-colors cursor-pointer">
+            <button onClick={handleLogout} className="btn-danger text-xs px-3 py-1.5">
               <LogOut className="h-3.5 w-3.5" />
               Sign Out
             </button>
@@ -121,7 +120,7 @@ export default function SettingsPage() {
 
       {/* API Keys */}
       {settings?.auth_enabled && (
-        <div className="rounded-2xl border border-border bg-card p-5 fade-in-up">
+        <div className="glass rounded-2xl p-5 fade-in-up">
           <div className="flex items-center gap-2 mb-1">
             <Key className="h-4 w-4 text-muted" />
             <p className="text-sm font-semibold text-primary">API Keys</p>
@@ -132,7 +131,8 @@ export default function SettingsPage() {
           {(keys || []).length > 0 && (
             <div className="space-y-2 mb-4">
               {keys.map(k => (
-                <div key={k.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-sidebar border border-border">
+                <div key={k.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(129,140,248,0.12)' }}>
                   <span className="text-xs font-mono text-secondary">{k.key_prefix}</span>
                   <span className="text-xs text-primary flex-1">{k.name}</span>
                   <span className="text-[10px] text-muted">
@@ -169,11 +169,10 @@ export default function SettingsPage() {
               value={newKeyName}
               onChange={e => setNewKeyName(e.target.value)}
               placeholder="Key name (e.g. CI Pipeline)"
-              className="flex-1 bg-sidebar border border-border rounded-xl px-3 py-2 text-sm text-primary placeholder:text-muted outline-none focus:border-accent transition-colors"
+              className="input-base flex-1"
               onKeyDown={e => e.key === 'Enter' && handleCreateKey()}
             />
-            <button onClick={handleCreateKey} disabled={creating || !newKeyName}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium disabled:opacity-40 hover:bg-accent-dim transition-colors cursor-pointer">
+            <button onClick={handleCreateKey} disabled={creating || !newKeyName} className="btn-primary">
               <Plus className="h-3.5 w-3.5" />
               {creating ? 'Creating...' : 'Create Key'}
             </button>

@@ -11,10 +11,14 @@ function TraceRow({ session, agentName }) {
   const durationMs = new Date(session.end) - new Date(session.start);
 
   return (
-    <div className="border border-border rounded-xl overflow-hidden fade-in-up">
+    <div className="rounded-xl overflow-hidden fade-in-up"
+      style={{ border: '1px solid rgba(129,140,248,0.12)', background: 'rgba(255,255,255,0.02)' }}>
       <button
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-card-hover transition-colors cursor-pointer text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 cursor-pointer text-left transition-all"
+        style={{ background: 'transparent' }}
+        onMouseEnter={e => e.currentTarget.style.background='rgba(129,140,248,0.04)'}
+        onMouseLeave={e => e.currentTarget.style.background='transparent'}
       >
         {open
           ? <ChevronDown className="h-4 w-4 text-muted shrink-0" />
@@ -39,14 +43,15 @@ function TraceRow({ session, agentName }) {
       </button>
 
       {open && (
-        <div className="border-t border-border divide-y divide-border bg-card">
+        <div style={{ borderTop: '1px solid rgba(129,140,248,0.1)', background: 'rgba(5,5,16,0.6)' }}>
           {session.events.map((ev, i) => {
             const c = EVENT_COLORS[ev.event_type] || EVENT_COLORS.custom;
             return (
-              <div key={ev.id} className="flex items-start gap-3 px-5 py-3">
+              <div key={ev.id} className="flex items-start gap-3 px-5 py-3"
+                style={{ borderBottom: i < session.events.length - 1 ? '1px solid rgba(129,140,248,0.06)' : 'none' }}>
                 <div className="flex flex-col items-center gap-1 pt-0.5 w-3">
                   <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: c.dot }} />
-                  {i < session.events.length - 1 && <span className="w-px bg-border h-full min-h-3 flex-1" />}
+                  {i < session.events.length - 1 && <span className="w-px bg-border h-full min-h-3 flex-1" style={{ background: 'rgba(129,140,248,0.1)' }} />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
@@ -83,7 +88,7 @@ export default function TracesPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-primary">Traces</h1>
+          <h1 className="text-xl font-bold text-gradient">Traces</h1>
           <p className="text-sm text-secondary mt-0.5">
             {sessions.length} sessions · {(traces || []).length} events
           </p>
@@ -93,7 +98,7 @@ export default function TracesPage() {
           <select
             value={filterAgent}
             onChange={e => setFilterAgent(e.target.value)}
-            className="bg-card border border-border rounded-xl px-3 py-2 text-sm text-primary outline-none focus:border-accent transition-colors cursor-pointer appearance-none"
+            className="input-base cursor-pointer appearance-none"
           >
             <option value="">All agents</option>
             {(agents || []).map(a => (

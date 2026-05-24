@@ -36,22 +36,28 @@ function SparkBar({ agentId, traces }) {
 }
 
 function AgentCard({ agent, traces, onClick }) {
-  const statusRing = {
-    healthy:  'border-green/30',
-    degraded: 'border-yellow/30',
-    offline:  'border-red/30',
-    unknown:  'border-border',
-  }[agent.status] || 'border-border';
+  const statusGlow = {
+    healthy:  'rgba(52,211,153,0.15)',
+    degraded: 'rgba(251,191,36,0.12)',
+    offline:  'rgba(248,113,113,0.12)',
+    unknown:  'rgba(129,140,248,0.08)',
+  }[agent.status] || 'rgba(129,140,248,0.08)';
 
   return (
     <button
       onClick={() => onClick(agent)}
-      className={`w-full text-left rounded-2xl border bg-card p-5 hover:bg-card-hover hover:border-border-bright transition-all cursor-pointer fade-in-up group ${statusRing}`}
+      className="w-full text-left rounded-2xl p-5 transition-all cursor-pointer fade-in-up group card-hover"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(129,140,248,0.12)',
+        backdropFilter: 'blur(12px)',
+      }}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 group-hover:bg-accent/20 transition-colors">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl transition-all"
+            style={{ background: 'rgba(129,140,248,0.1)', border: '1px solid rgba(129,140,248,0.2)' }}>
             <Bot className="h-5 w-5 text-accent" />
           </div>
           <div>
@@ -60,7 +66,8 @@ function AgentCard({ agent, traces, onClick }) {
               {agent.framework && <span className="text-[11px] text-muted">{agent.framework}</span>}
               {agent.framework && agent.model && <span className="text-muted">·</span>}
               {agent.model && (
-                <span className="text-[11px] bg-card-hover border border-border px-1.5 py-0.5 rounded text-secondary">
+                <span className="text-[11px] px-1.5 py-0.5 rounded text-secondary"
+                  style={{ background: 'rgba(129,140,248,0.08)', border: '1px solid rgba(129,140,248,0.15)' }}>
                   {agent.model}
                 </span>
               )}
@@ -76,7 +83,7 @@ function AgentCard({ agent, traces, onClick }) {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border">
+      <div className="grid grid-cols-2 gap-3 pt-3" style={{ borderTop: '1px solid rgba(129,140,248,0.1)' }}>
         <div className="flex items-center gap-2">
           <DollarSign className="h-3.5 w-3.5 text-muted shrink-0" />
           <div>
@@ -116,7 +123,7 @@ export default function AgentsPage({ onSelectAgent }) {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-primary">Agents</h1>
+          <h1 className="text-xl font-bold text-gradient">Agents</h1>
           <p className="text-sm text-secondary mt-0.5">
             {agents ? `${agents.length} registered` : 'Loading...'}
           </p>
@@ -128,7 +135,7 @@ export default function AgentsPage({ onSelectAgent }) {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search agents..."
-              className="bg-card border border-border rounded-xl pl-8 pr-4 py-2 text-sm text-primary placeholder:text-muted outline-none focus:border-accent transition-colors w-48"
+              className="input-base pl-8 w-48"
             />
           </div>
         </div>

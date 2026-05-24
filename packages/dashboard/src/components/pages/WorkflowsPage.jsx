@@ -40,7 +40,8 @@ function WorkflowCard({ workflow, runs, onSelect, onDelete }) {
 
   return (
     <div onClick={() => onSelect(workflow)}
-      className="rounded-2xl border border-border bg-card p-5 hover:border-border-bright transition-colors cursor-pointer fade-in-up group">
+      className="rounded-2xl p-5 cursor-pointer fade-in-up card-hover group"
+      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(129,140,248,0.12)', backdropFilter: 'blur(12px)' }}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <span className="text-lg">{workflow.icon}</span>
@@ -52,9 +53,11 @@ function WorkflowCard({ workflow, runs, onSelect, onDelete }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-            workflow.status === 'active' ? 'bg-green/10 text-green' : 'bg-card-hover text-muted'
-          }`}>
+          <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium`}
+            style={workflow.status === 'active'
+              ? { background: 'rgba(52,211,153,0.12)', color: 'var(--color-green)', border: '1px solid rgba(52,211,153,0.25)' }
+              : { background: 'rgba(255,255,255,0.04)', color: 'var(--color-muted)', border: '1px solid rgba(129,140,248,0.1)' }
+            }>
             <span className={`h-1.5 w-1.5 rounded-full ${workflow.status === 'active' ? 'bg-green' : 'bg-muted'}`} />
             {workflow.status}
           </span>
@@ -124,30 +127,29 @@ export default function WorkflowsPage({ onSelectWorkflow }) {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-primary">Workflows</h1>
+          <h1 className="text-xl font-bold text-gradient">Workflows</h1>
           <p className="text-sm text-secondary mt-0.5">AI-powered automations that run on your schedule.</p>
         </div>
         <button onClick={() => setShowCreate(v => !v)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-dim transition-colors cursor-pointer">
+          className="btn-primary">
           <Plus className="h-4 w-4" />
           New Workflow
         </button>
       </div>
 
       {showCreate && (
-        <div className="rounded-2xl border border-accent/30 bg-accent/5 p-5 mb-6 space-y-3 fade-in-up">
-          <p className="text-sm font-semibold text-primary">Create Workflow</p>
+        <div className="glass rounded-2xl p-5 mb-6 space-y-3 fade-in-up"
+          style={{ borderColor: 'rgba(129,140,248,0.25)' }}>
+          <p className="text-sm font-semibold text-gradient">Create Workflow</p>
           <input value={newName} onChange={e => setNewName(e.target.value)}
             placeholder="Workflow name (e.g. Morning Email Digest)"
-            className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm text-primary placeholder:text-muted outline-none focus:border-accent transition-colors"
+            className="input-base"
             onKeyDown={e => e.key === 'Enter' && handleCreate()} />
           <div className="flex gap-2">
-            <button onClick={handleCreate} disabled={creating || !newName}
-              className="px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium disabled:opacity-40 hover:bg-accent-dim transition-colors cursor-pointer">
+            <button onClick={handleCreate} disabled={creating || !newName} className="btn-primary">
               {creating ? 'Creating...' : 'Create'}
             </button>
-            <button onClick={() => setShowCreate(false)}
-              className="px-4 py-2 rounded-xl bg-card border border-border text-sm text-secondary hover:text-primary transition-colors cursor-pointer">
+            <button onClick={() => setShowCreate(false)} className="btn-ghost">
               Cancel
             </button>
           </div>
