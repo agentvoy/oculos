@@ -1,6 +1,5 @@
 """Secrets vault API — encrypted storage for API keys."""
 from __future__ import annotations
-import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from cryptography.fernet import Fernet
@@ -37,14 +36,14 @@ def decrypt(encrypted: str) -> str:
 
 
 def _to_public(s) -> SecretPublic:
-    return SecretPublic(id=s.id, agent_id=s.agent_id, key_name=s.key_name,
+    return SecretPublic(id=s.id, key_name=s.key_name,
                         hint=s.hint, created_at=s.created_at, rotated_at=s.rotated_at)
 
 
 @router.get("", response_model=list[SecretPublic])
-async def list_secrets(agent_id: str | None = None):
+async def list_secrets():
     db = get_db()
-    secrets = await db.list_secrets(agent_id)
+    secrets = await db.list_secrets()
     return [_to_public(s) for s in secrets]
 
 
@@ -52,8 +51,7 @@ async def list_secrets(agent_id: str | None = None):
 async def create_secret(body: SecretCreate):
     db = get_db()
     encrypted = encrypt(body.value)
-    secret = await db.create_secret(body.agent_id, body.key_name, encrypted, body.hint)
-    await db.log_audit("secret.create", "secret", secret.id, {"key_name": body.key_name})
+    secret = await db.create_secret(body.key_name, encrypted, body.hint)
     return _to_public(secret)
 
 
@@ -67,19 +65,15 @@ async def rotate_secret(secret_id: str, body: dict):
     secret = await db.rotate_secret(secret_id, encrypted)
     if not secret:
         raise HTTPException(404, "Secret not found")
-    await db.log_audit("secret.rotate", "secret", secret_id, {})
     return _to_public(secret)
 
 
 @router.get("/{secret_id}/reveal")
 async def reveal_secret(secret_id: str):
-    """Return decrypted value — use carefully."""
     db = get_db()
-    secrets = await db.list_secrets()
-    secret = next((s for s in secrets if s.id == secret_id), None)
+    secret = await db.get_secret(secret_id)
     if not secret:
         raise HTTPException(404, "Secret not found")
-    await db.log_audit("secret.reveal", "secret", secret_id, {})
     return {"value": decrypt(secret.encrypted_value)}
 
 
@@ -89,4 +83,3 @@ async def delete_secret(secret_id: str):
     deleted = await db.delete_secret(secret_id)
     if not deleted:
         raise HTTPException(404, "Secret not found")
-    await db.log_audit("secret.delete", "secret", secret_id, {})
